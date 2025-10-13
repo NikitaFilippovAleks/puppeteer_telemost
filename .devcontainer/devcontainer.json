@@ -1,0 +1,23 @@
+{
+  "name": "puppeteer-telemost",
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+  "service": "app",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "initializeCommand": "ssh-add ~/.ssh/id_rsa",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "naumovs.color-highlight",
+        "mikestead.dotenv",
+        "eamodio.gitlens",
+        "firsttris.vscode-jest-runner",
+        "SimonSiefke.svg-preview",
+        "wayou.vscode-todo-highlight"
+      ]
+    }
+  }
+}
