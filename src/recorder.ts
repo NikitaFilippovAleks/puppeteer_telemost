@@ -4,8 +4,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import puppeteer, { Browser, Page } from 'puppeteer';
-import { getStream, Stream } from 'puppeteer-stream';
+import { Page, Browser } from 'puppeteer';
+import { getStream, launch, Stream } from 'puppeteer-stream';
 // import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -56,20 +56,21 @@ export class TelemostRecorder {
 
     try {
       const launchOptions: any = {
-        headless: this.config.browser.headless,
+        headless: 'new',
         args: this.config.browser.args,
+        allowIncognito: true
       };
 
       if (this.config.browser.executablePath) {
         launchOptions.executablePath = this.config.browser.executablePath;
       }
 
-      this.browser = await puppeteer.launch(launchOptions);
+      this.browser = await launch(launchOptions) as any;
 
-      this.page = await this.browser.newPage();
+      this.page = await this.browser!.newPage();
 
       // Настройка viewport
-      await this.page.setViewport(this.config.page.viewport);
+      // await this.page.setViewport(this.config.page.viewport);
 
       // Настройка логирования
       if (this.config.logging.enableConsoleLogs) {
@@ -107,34 +108,148 @@ export class TelemostRecorder {
         timeout: this.config.page.timeout,
       });
 
-      this.logger.info('Ожидание установления WebRTC соединения');
+      this.logger.info('Страница загружена, поиск кнопки входа в конференцию...');
+
+      // Ищем кнопку входа в конференцию
+      await this.clickEnterConferenceButton();
+
+      // this.logger.info('Ожидание установления WebRTC соединения');
 
       // Ждём установления WebRTC соединения
-      await this.page.waitForFunction(
-        () => {
-          // Проверяем различные возможные объекты, которые может использовать Telemost
-          for (const selector of this.config.webrtc.selectors) {
-            try {
-              if (eval(selector)) return true;
-            } catch (e) {
-              // Игнорируем ошибки eval
-            }
-          }
-          return false;
-        },
-        {
-          timeout: this.config.page.waitForSelector.timeout,
-          polling: this.config.page.waitForSelector.polling,
-        }
-      );
+      // await this.page.waitForFunction(
+      //   () => {
+      //     // Проверяем различные возможные объекты, которые может использовать Telemost
+      //     for (const selector of this.config.webrtc.selectors) {
+      //       try {
+      //         if (eval(selector)) return true;
+      //       } catch (e) {
+      //         // Игнорируем ошибки eval
+      //       }
+      //     }
+      //     return false;
+      //   },
+      //   {
+      //     timeout: this.config.page.waitForSelector.timeout,
+      //     polling: this.config.page.waitForSelector.polling,
+      //   }
+      // );
 
-      this.logger.success('WebRTC соединение установлено');
+      // this.logger.success('WebRTC соединение установлено');
 
       // Дополнительная пауза для стабилизации
-      await this.page.waitForTimeout(this.config.webrtc.stabilizationDelay);
+      // await this.page.waitForTimeout(this.config.webrtc.stabilizationDelay);
     } catch (error) {
       this.logger.error('Ошибка подключения к встрече', error as Error);
       throw new RecordingError('Не удалось подключиться к встрече', error as Error);
+    }
+  }
+
+  /**
+   * Поиск и нажатие кнопки входа в конференцию
+   */
+  async clickEnterConferenceButton(): Promise<void> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      this.logger.info('Поиск кнопки с data-test-id="enter-conference-button"');
+
+      // Ждем появления кнопки входа в конференцию
+      // const buttonSelector = '[data-test-id="enter-conference-button"]';
+
+      // const element = await this.page.waitForSelector(buttonSelector, {
+      //   timeout: this.config.page.waitForSelector.timeout,
+      //   visible: true,
+      // });
+      // this.logger.info('Кнопка найдена', );
+
+
+      // Нажимаем на кнопку
+      // await element?.click()
+      // await this.page.click(buttonSelector);
+      const button = await this.page.waitForSelector('text=Подключиться', {
+        timeout: this.config.page.waitForSelector.timeout,
+        visible: true,
+      });
+      this.logger.info('Кнопка найдена, нажимаем...');
+      // await this.page.evaluate((el: any) => el.click(), button);
+
+      // await button?.click()
+      await Promise.all([
+        // this.page.waitForNavigation(),
+        // this.page.click('text=Подключиться')
+        this.page.evaluate((el: any) => el.click(), button)
+      ]);
+
+      this.logger.success('Кнопка нажата, ожидание входа в конференцию...');
+      this.logger.success('Мы в конференции');
+
+      // // Ждем некоторое время для загрузки конференции
+      // await this.page.waitForTimeout(3000);
+
+      // Проверяем, что мы действительно вошли в конференцию
+      // Можно проверить по изменению URL или появлению новых элементов
+      // await this.waitForConferenceToLoad();
+
+    } catch (error) {
+      this.logger.error('Ошибка при нажатии кнопки входа в конференцию', error as Error);
+      throw new RecordingError('Не удалось войти в конференцию', error as Error);
+    }
+  }
+
+  /**
+   * Ожидание полной загрузки конференции
+   */
+  async waitForConferenceToLoad(): Promise<void> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      this.logger.info('Ожидание загрузки конференции...');
+
+      // Ждем появления элементов конференции
+      // Можно добавить дополнительные селекторы для проверки
+      const conferenceSelectors = [
+        '[data-test-id="conference-room"]',
+        '[data-test-id="video-container"]',
+        '[data-test-id="audio-controls"]',
+        '.conference-room',
+        '.video-container',
+        '.meeting-container',
+        'video',
+        'audio'
+      ];
+
+      let conferenceLoaded = false;
+      for (const selector of conferenceSelectors) {
+        try {
+          // await this.page.waitForSelector(selector, {
+          //   timeout: 5000,
+          //   visible: true,
+          // });
+          await this.page.waitForNavigation();
+          this.logger.info(`Элемент конференции найден: ${selector}`);
+          conferenceLoaded = true;
+          break;
+        } catch (e) {
+          // Продолжаем поиск других селекторов
+        }
+      }
+
+      if (!conferenceLoaded) {
+        this.logger.warn('Специфичные элементы конференции не найдены, продолжаем...');
+      }
+
+      // Дополнительная пауза для стабилизации
+      await this.page.waitForTimeout(2000);
+
+      this.logger.success('Конференция загружена');
+
+    } catch (error) {
+      this.logger.warn('Ошибка при ожидании загрузки конференции', error as Error);
+      // Не выбрасываем ошибку, так как конференция может загрузиться и без специфичных элементов
     }
   }
 
@@ -318,6 +433,300 @@ export class TelemostRecorder {
     } catch (error) {
       this.logger.warn('Не удалось получить статистику WebRTC');
       return { audioPackets: 0, audioBytes: 0 };
+    }
+  }
+
+  /**
+   * Создание скриншота страницы
+   */
+  async takeScreenshot(outputPath?: string): Promise<Buffer> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      const screenshot = await this.page.screenshot({
+        fullPage: true,
+        type: 'png',
+      });
+
+      if (outputPath) {
+        ensureDirectoryExists(path.dirname(outputPath));
+        fs.writeFileSync(outputPath, screenshot);
+        this.logger.info(`Скриншот сохранен: ${outputPath}`);
+      }
+
+      return screenshot;
+    } catch (error) {
+      this.logger.error('Ошибка создания скриншота', error as Error);
+      throw new RecordingError('Не удалось создать скриншот', error as Error);
+    }
+  }
+
+  /**
+   * Получение HTML содержимого страницы
+   */
+  async getPageContent(): Promise<string> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      return await this.page.content();
+    } catch (error) {
+      this.logger.error('Ошибка получения содержимого страницы', error as Error);
+      throw new RecordingError('Не удалось получить содержимое страницы', error as Error);
+    }
+  }
+
+  /**
+   * Получение текстового содержимого страницы
+   */
+  async getPageText(): Promise<string> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      return await this.page.evaluate(() => document.body.innerText);
+    } catch (error) {
+      this.logger.error('Ошибка получения текста страницы', error as Error);
+      throw new RecordingError('Не удалось получить текст страницы', error as Error);
+    }
+  }
+
+  /**
+   * Получение информации о DOM элементах
+   */
+  async getPageElements(): Promise<any> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      return await this.page.evaluate(() => {
+        const elements = {
+          title: document.title,
+          url: window.location.href,
+          audioElements: Array.from(document.querySelectorAll('audio')).map(el => ({
+            src: el.src,
+            duration: el.duration,
+            paused: el.paused,
+            muted: el.muted,
+            volume: el.volume,
+          })),
+          videoElements: Array.from(document.querySelectorAll('video')).map(el => ({
+            src: el.src,
+            duration: el.duration,
+            paused: el.paused,
+            muted: el.muted,
+            volume: el.volume,
+            width: el.videoWidth,
+            height: el.videoHeight,
+          })),
+          canvasElements: Array.from(document.querySelectorAll('canvas')).map(el => ({
+            width: el.width,
+            height: el.height,
+          })),
+          scripts: Array.from(document.querySelectorAll('script')).map(el => ({
+            src: el.src,
+            type: el.type,
+          })),
+          links: Array.from(document.querySelectorAll('link')).map(el => ({
+            href: el.href,
+            rel: el.rel,
+            type: el.type,
+          })),
+          meta: Array.from(document.querySelectorAll('meta')).map(el => ({
+            name: el.name,
+            content: el.content,
+            property: el.getAttribute('property'),
+          })),
+        };
+
+        return elements;
+      });
+    } catch (error) {
+      this.logger.error('Ошибка получения информации об элементах', error as Error);
+      throw new RecordingError('Не удалось получить информацию об элементах', error as Error);
+    }
+  }
+
+  /**
+   * Получение логов консоли
+   */
+  async getConsoleLogs(): Promise<string[]> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    const logs: string[] = [];
+
+    try {
+      // Получаем логи, которые уже были записаны
+      this.page.on('console', (msg: any) => {
+        logs.push(`[${msg.type().toUpperCase()}] ${msg.text()}`);
+      });
+
+      return logs;
+    } catch (error) {
+      this.logger.error('Ошибка получения логов консоли', error as Error);
+      throw new RecordingError('Не удалось получить логи консоли', error as Error);
+    }
+  }
+
+  /**
+   * Проверка наличия WebRTC объектов на странице
+   */
+  async checkWebRTCObjects(): Promise<any> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      return await this.page.evaluate(() => {
+        const webrtcObjects = {
+          windowObjects: {
+            remoteStream: typeof (window as any).remoteStream !== 'undefined',
+            localStream: typeof (window as any).localStream !== 'undefined',
+            pc: typeof (window as any).pc !== 'undefined',
+            webrtc: typeof (window as any).webrtc !== 'undefined',
+            mediaStream: typeof (window as any).mediaStream !== 'undefined',
+          },
+          domElements: {
+            audio: document.querySelector('audio') !== null,
+            video: document.querySelector('video') !== null,
+            canvas: document.querySelector('canvas') !== null,
+          },
+          navigator: {
+            mediaDevices: typeof navigator.mediaDevices !== 'undefined',
+            getUserMedia: typeof navigator.mediaDevices?.getUserMedia !== 'undefined',
+            webkitGetUserMedia: typeof (navigator as any).webkitGetUserMedia !== 'undefined',
+            mozGetUserMedia: typeof (navigator as any).mozGetUserMedia !== 'undefined',
+          },
+          rtcPeerConnection: typeof RTCPeerConnection !== 'undefined',
+          mediaStream: typeof MediaStream !== 'undefined',
+        };
+
+        return webrtcObjects;
+      });
+    } catch (error) {
+      this.logger.error('Ошибка проверки WebRTC объектов', error as Error);
+      throw new RecordingError('Не удалось проверить WebRTC объекты', error as Error);
+    }
+  }
+
+  /**
+   * Поиск кнопки по различным селекторам
+   */
+  async findButton(selectors: string[]): Promise<string | null> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    for (const selector of selectors) {
+      try {
+        const element = await this.page.$(selector);
+        if (element) {
+          this.logger.info(`Кнопка найдена по селектору: ${selector}`);
+          return selector;
+        }
+      } catch (e) {
+        // Продолжаем поиск
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Нажатие на кнопку с ожиданием
+   */
+  async clickButton(selector: string, waitForElement: boolean = true): Promise<void> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      if (waitForElement) {
+        await this.page.waitForSelector(selector, {
+          timeout: this.config.page.waitForSelector.timeout,
+          visible: true,
+        });
+      }
+
+      this.logger.info(`Нажимаем на кнопку: ${selector}`);
+      await this.page.click(selector);
+      this.logger.success('Кнопка нажата');
+
+    } catch (error) {
+      this.logger.error(`Ошибка при нажатии кнопки ${selector}`, error as Error);
+      throw new RecordingError(`Не удалось нажать кнопку: ${selector}`, error as Error);
+    }
+  }
+
+  /**
+   * Ожидание появления элемента на странице
+   */
+  async waitForElement(selector: string, timeout?: number): Promise<boolean> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      await this.page.waitForSelector(selector, {
+        timeout: timeout || this.config.page.waitForSelector.timeout,
+        visible: true,
+      });
+      this.logger.info(`Элемент найден: ${selector}`);
+      return true;
+    } catch (error) {
+      this.logger.warn(`Элемент не найден: ${selector}`);
+      return false;
+    }
+  }
+
+  /**
+   * Проверка, находится ли пользователь в конференции
+   */
+  async isInConference(): Promise<boolean> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    try {
+      return await this.page.evaluate(() => {
+        // Проверяем различные индикаторы конференции
+        const conferenceIndicators = [
+          '[data-test-id="conference-room"]',
+          '[data-test-id="video-container"]',
+          '[data-test-id="audio-controls"]',
+          '.conference-room',
+          '.video-container',
+          '.meeting-container',
+          '.conference-container'
+        ];
+
+        for (const selector of conferenceIndicators) {
+          if (document.querySelector(selector)) {
+            return true;
+          }
+        }
+
+        // Проверяем наличие медиа элементов
+        const hasMediaElements = document.querySelector('video') || document.querySelector('audio');
+        if (hasMediaElements) {
+          return true;
+        }
+
+        // Проверяем URL на наличие индикаторов конференции
+        const url = window.location.href;
+        const conferenceUrlIndicators = ['conference', 'meeting', 'room', 'call'];
+        return conferenceUrlIndicators.some(indicator => url.includes(indicator));
+      });
+    } catch (error) {
+      this.logger.warn('Ошибка при проверке статуса конференции', error as Error);
+      return false;
     }
   }
 

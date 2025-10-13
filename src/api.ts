@@ -68,7 +68,7 @@ app.use(cleanupTempFiles);
  * POST /api/record
  */
 app.post('/api/record', async (req: Request, res: Response, next: NextFunction) => {
-  const { meetingUrl, duration = 300, format = 'webm' }: SimpleRecordRequest = req.body;
+  const { meetingUrl, duration = 10, format = 'webm' }: SimpleRecordRequest = req.body;
 
   logger.info('Received request:', req.body);
 
@@ -94,6 +94,8 @@ app.post('/api/record', async (req: Request, res: Response, next: NextFunction) 
       },
       logging: config.logging,
     });
+
+
 
     try {
       // Записываем аудио
@@ -130,14 +132,14 @@ app.post('/api/record', async (req: Request, res: Response, next: NextFunction) 
       fileStream.pipe(res);
 
       // Очищаем файл после отправки
-      fileStream.on('end', () => {
-        setTimeout(() => {
-          if (fs.existsSync(outputPath)) {
-            fs.unlinkSync(outputPath);
-            logger.info(`Файл ${recordingId} удален`);
-          }
-        }, 1000);
-      });
+      // fileStream.on('end', () => {
+      //   setTimeout(() => {
+      //     if (fs.existsSync(outputPath)) {
+      //       fs.unlinkSync(outputPath);
+      //       logger.info(`Файл ${recordingId} удален`);
+      //     }
+      //   }, 1000);
+      // });
 
       fileStream.on('error', (error) => {
         logger.error(`Ошибка отправки файла ${recordingId}`, error);
