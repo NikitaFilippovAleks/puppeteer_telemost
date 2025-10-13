@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+    command: sleep infinity
+    env_file:
+      - .env
+    volumes:
+      - .:/app:cached
+    ports:
+      - 3100:3100
+    entrypoint: sh ./docker-entrypoint-development.sh
