@@ -20,9 +20,9 @@ export function validateMeetingUrl(url: string): ValidationResult {
     return { isValid: false, errors };
   }
 
-  if (!url.includes('telemost.yandex.ru')) {
-    errors.push('URL должен быть от Yandex Telemost');
-  }
+  // if (!url.includes('telemost.yandex.ru')) {
+  //   errors.push('URL должен быть от Yandex Telemost');
+  // }
 
   try {
     new URL(url);

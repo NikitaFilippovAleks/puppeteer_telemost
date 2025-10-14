@@ -2,6 +2,8 @@ services:
   app:
     build:
       context: .
+      platforms:
+        - linux/amd64
     command: sleep infinity
     env_file:
       - .env

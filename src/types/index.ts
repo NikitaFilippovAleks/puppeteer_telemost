@@ -3,12 +3,13 @@
  */
 
 import { Request, Response } from 'express';
+// import puppeteer from 'puppeteer';
 import { Readable } from 'stream';
 
 // ===== КОНФИГУРАЦИЯ =====
 
 export interface BrowserConfig {
-  headless: boolean;
+  headless?: boolean | 'new';
   args: string[];
   executablePath?: string;
 }
@@ -199,9 +200,9 @@ export const MAX_DURATION = 3600;
 
 export const DEFAULT_CONFIG: AppConfig = {
   browser: {
-    headless: true,
+    // headless: 'new',
     args: [
-      '--headless=new',
+      // '--headless=new',
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
@@ -223,7 +224,7 @@ export const DEFAULT_CONFIG: AppConfig = {
       '--disable-sync',
       '--disable-translate',
       '--hide-scrollbars',
-      '--mute-audio',
+      // '--mute-audio',
       '--no-default-browser-check',
       '--disable-background-networking',
       '--disable-client-side-phishing-detection',
@@ -279,7 +280,9 @@ export const DEFAULT_CONFIG: AppConfig = {
       '--disable-lcd-text',
       '--disable-background-mode',
     ],
-    executablePath: '/usr/bin/chromium',
+    // executablePath: '/usr/bin/chromium',
+    // executablePath: puppeteer.executablePath(),
+    executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   },
   page: {
     viewport: {

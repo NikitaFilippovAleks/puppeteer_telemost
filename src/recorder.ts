@@ -4,8 +4,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Page, Browser } from 'puppeteer';
-import { getStream, launch, Stream } from 'puppeteer-stream';
+// import { Browser, Page, launch } from 'puppeteer';
+import { getStream, launch } from 'puppeteer-stream';
+// import { getStream, Stream } from 'puppeteer-stream';
+// import { Browser, Page } from 'puppeteer-stream/node_modules/puppeteer-core';
 // import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -19,13 +21,17 @@ import {
 } from '@/types';
 import { ensureDirectoryExists, getFileInfo } from '@/utils/file';
 import { createLogger } from '@/utils/logger';
+import { Browser, Page } from 'puppeteer';
+// import Stream from 'stream';
+import { Transform } from "stream";
+// import { executablePath } from 'puppeteer';
 
 
 export class TelemostRecorder {
   private config: AppConfig;
   private browser: Browser | null = null;
   private page: Page | null = null;
-  private audioStream: Stream | null = null;
+  private audioStream: Transform | null = null;
   private fileStream: FileStream | null = null;
   private isRecording: boolean = false;
   private logger = createLogger(DEFAULT_CONFIG.logging);
@@ -58,32 +64,63 @@ export class TelemostRecorder {
       const launchOptions: any = {
         headless: 'new',
         args: this.config.browser.args,
-        allowIncognito: true
+        allowIncognito: true,
       };
 
       if (this.config.browser.executablePath) {
         launchOptions.executablePath = this.config.browser.executablePath;
       }
 
-      this.browser = await launch(launchOptions) as any;
+      // this.browser = await launch(launchOptions);
 
-      this.page = await this.browser!.newPage();
+      this.browser = await launch({
+        // headless: false,
+        // dumpio: true,
+        // macOS:
+        // allowIncognito: true,
+        allowIncognito: true,
+        executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        // executablePath: '/usr/bin/chromium',
+        // startDelay: 2000,
+        headless: 'new',
+        // linux (docker):
+        // executablePath: executablePath(),
+        // headless: "new", // supports audio!
+        args: [
+          '--enable-extensions',
+          "--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli"
+        ],
+        // headless: false, // for debugging
+        defaultViewport: { width: 1920, height: 1080 },
+        // args: [
+        //     '--headless=new',
+        //     // '--window-size=1920,1080',
+        //     // '--start-fullscreen',
+        //     '--allow-file-access-from-files',
+        //     '--enable-audio-service',
+        //     '--mute-audio=false',
+        // ]
+      });
+
+      this.logger.success('launch прошел');
+
+      this.page = await this.browser.newPage();
 
       // Настройка viewport
       // await this.page.setViewport(this.config.page.viewport);
 
       // Настройка логирования
-      if (this.config.logging.enableConsoleLogs) {
-        this.page.on('console', (msg: any) => {
-          this.logger.pageLog(msg.text());
-        });
-      }
+      // if (this.config.logging.enableConsoleLogs) {
+      //   this.page.on('console', (msg: any) => {
+      //     this.logger.pageLog(msg.text());
+      //   });
+      // }
 
-      if (this.config.logging.enablePageErrors) {
-        this.page.on('pageerror', (error: Error) => {
-          this.logger.pageError(error.message, error);
-        });
-      }
+      // if (this.config.logging.enablePageErrors) {
+      //   this.page.on('pageerror', (error: Error) => {
+      //     this.logger.pageError(error.message, error);
+      //   });
+      // }
 
       this.logger.success('Браузер инициализирован');
     } catch (error) {
@@ -111,7 +148,7 @@ export class TelemostRecorder {
       this.logger.info('Страница загружена, поиск кнопки входа в конференцию...');
 
       // Ищем кнопку входа в конференцию
-      await this.clickEnterConferenceButton();
+      // await this.clickEnterConferenceButton();
 
       // this.logger.info('Ожидание установления WebRTC соединения');
 
@@ -168,6 +205,14 @@ export class TelemostRecorder {
       // Нажимаем на кнопку
       // await element?.click()
       // await this.page.click(buttonSelector);
+      // const buttonGoToBrowser = await this.page.waitForSelector('text=Продолжить в браузере', {
+      //   // timeout: this.config.page.waitForSelector.timeout,
+      //   visible: true,
+      // });
+      // if (buttonGoToBrowser) {
+      //   await buttonGoToBrowser.click();
+      //   await this.page.waitForNavigation();
+      // }
       const button = await this.page.waitForSelector('text=Подключиться', {
         timeout: this.config.page.waitForSelector.timeout,
         visible: true,
@@ -243,7 +288,7 @@ export class TelemostRecorder {
       }
 
       // Дополнительная пауза для стабилизации
-      await this.page.waitForTimeout(2000);
+      // await this.page.waitForTimeout(2000);
 
       this.logger.success('Конференция загружена');
 
@@ -268,7 +313,9 @@ export class TelemostRecorder {
     this.logger.start('Захват аудио потока');
 
     try {
-      this.audioStream = await getStream(this.page as any, { audio: true, video: false });
+      this.audioStream = await getStream(this.page, { audio: true, video: false });
+
+      console.log('stream captured');
 
       // Создаем директорию для выходного файла
       ensureDirectoryExists(path.dirname(outputPath));
@@ -342,6 +389,7 @@ export class TelemostRecorder {
     try {
       await this.init();
       await this.connectToMeeting(meetingUrl);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
       await this.startRecording(outputPath);
 
       // Показываем прогресс записи
@@ -433,33 +481,6 @@ export class TelemostRecorder {
     } catch (error) {
       this.logger.warn('Не удалось получить статистику WebRTC');
       return { audioPackets: 0, audioBytes: 0 };
-    }
-  }
-
-  /**
-   * Создание скриншота страницы
-   */
-  async takeScreenshot(outputPath?: string): Promise<Buffer> {
-    if (!this.page) {
-      throw new RecordingError('Страница не инициализирована');
-    }
-
-    try {
-      const screenshot = await this.page.screenshot({
-        fullPage: true,
-        type: 'png',
-      });
-
-      if (outputPath) {
-        ensureDirectoryExists(path.dirname(outputPath));
-        fs.writeFileSync(outputPath, screenshot);
-        this.logger.info(`Скриншот сохранен: ${outputPath}`);
-      }
-
-      return screenshot;
-    } catch (error) {
-      this.logger.error('Ошибка создания скриншота', error as Error);
-      throw new RecordingError('Не удалось создать скриншот', error as Error);
     }
   }
 
