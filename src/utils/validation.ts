@@ -137,6 +137,8 @@ export function validateRecordingParams(params: {
   duration?: number;
   format?: string;
   outputPath?: string;
+  recordUntilEnd?: boolean;
+  maxDuration?: number;
 }): ValidationResult {
   const errors: string[] = [];
 
@@ -152,6 +154,31 @@ export function validateRecordingParams(params: {
     if (!durationValidation.isValid) {
       errors.push(...durationValidation.errors);
     }
+  }
+
+  // Валидируем recordUntilEnd, если указан
+  if (params.recordUntilEnd !== undefined) {
+    if (typeof params.recordUntilEnd !== 'boolean') {
+      errors.push('recordUntilEnd должен быть булевым значением');
+    }
+  }
+
+  // Валидируем maxDuration, если указан
+  if (params.maxDuration !== undefined) {
+    const maxDurationValidation = validateDuration(params.maxDuration);
+    if (!maxDurationValidation.isValid) {
+      errors.push(...maxDurationValidation.errors);
+    }
+  }
+
+  // Дополнительная валидация: если recordUntilEnd = true, то duration не должен быть указан
+  if (params.recordUntilEnd === true && params.duration !== undefined) {
+    errors.push('При recordUntilEnd=true параметр duration не должен быть указан');
+  }
+
+  // Дополнительная валидация: если recordUntilEnd = true, то maxDuration должен быть указан
+  if (params.recordUntilEnd === true && params.maxDuration === undefined) {
+    errors.push('При recordUntilEnd=true параметр maxDuration обязателен');
   }
 
   // Валидируем формат, если указан

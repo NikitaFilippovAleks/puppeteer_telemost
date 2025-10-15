@@ -381,6 +381,55 @@ export class TelemostRecorder {
   }
 
   /**
+   * Запись аудио до завершения встречи с максимальной продолжительностью
+   */
+  async recordUntilMeetingEnd(
+    meetingUrl: string,
+    maxDurationSec: number,
+    outputPath: string
+  ): Promise<RecordingResult> {
+    const timer = this.logger.createTimer(`Запись до завершения встречи (макс. ${maxDurationSec} секунд)`);
+
+    try {
+      await this.init();
+      await this.connectToMeeting(meetingUrl);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+      await this.startRecording(outputPath);
+
+      // Мониторим завершение встречи
+      const meetingEnded = await this.monitorMeetingEnd(maxDurationSec);
+
+      await this.stopRecording();
+
+      // Получаем информацию о файле
+      const fileInfo = getFileInfo(outputPath);
+      const result: RecordingResult = {
+        success: true,
+        filePath: outputPath,
+        duration: meetingEnded.actualDuration,
+        fileSize: fileInfo?.size || undefined,
+      };
+
+      this.logger.success(`Запись завершена: ${outputPath} (${meetingEnded.actualDuration}с)`);
+      timer();
+
+      return result;
+    } catch (error) {
+      this.logger.error('Ошибка при записи', error as Error);
+      timer();
+
+      const result: RecordingResult = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Неизвестная ошибка',
+      };
+
+      return result;
+    } finally {
+      await this.cleanup();
+    }
+  }
+
+  /**
    * Запись аудио на заданное время
    */
   async recordForDuration(
@@ -709,6 +758,104 @@ export class TelemostRecorder {
       this.logger.warn(`Элемент не найден: ${selector}`);
       return false;
     }
+  }
+
+  /**
+   * Мониторинг завершения встречи
+   */
+  async monitorMeetingEnd(maxDurationSec: number): Promise<{ actualDuration: number; reason: string }> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+
+    const startTime = Date.now();
+    this.logger.info('Начинаем мониторинг завершения встречи...');
+
+    return new Promise((resolve) => {
+      let isResolved = false;
+      let navigationTimeout: NodeJS.Timeout | null = null;
+      let progressInterval: NodeJS.Timeout | null = null;
+
+      const resolveWithTime = (reason: string) => {
+        if (isResolved) return;
+        isResolved = true;
+
+        if (navigationTimeout) clearTimeout(navigationTimeout);
+        if (progressInterval) clearInterval(progressInterval);
+
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        this.logger.info(`Встреча завершена (${reason}): ${elapsedSeconds}с`);
+        resolve({ actualDuration: elapsedSeconds, reason });
+      };
+
+      // Таймер для максимальной продолжительности
+      navigationTimeout = setTimeout(() => {
+        resolveWithTime('max_duration_reached');
+      }, maxDurationSec * 1000);
+
+      // Интервал для показа прогресса
+      progressInterval = setInterval(() => {
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        if (elapsedSeconds > 0 && elapsedSeconds % 30 === 0) {
+          this.logger.info(`Запись продолжается: ${elapsedSeconds}с / ${maxDurationSec}с`);
+        }
+      }, 2000);
+
+      // Обработка навигации с помощью waitForNavigation
+      const handleNavigation = async () => {
+        try {
+          // Ждем навигации с таймаутом
+          this.logger.info('Ожидание навигации');
+          await this.page!.waitForNavigation({
+            timeout: 0
+          });
+          resolveWithTime('navigation_detected');
+          return;
+
+          // // Если навигация произошла, проверяем, покинули ли мы конференцию
+          // const inConference = await this.isInConference();
+          // if (!inConference) {
+          //   resolveWithTime('navigation_detected');
+          //   return;
+          // }
+
+          // // Если все еще в конференции, продолжаем ждать навигации
+          // handleNavigation();
+        } catch (error) {
+          // Таймаут ожидания навигации - это нормально, продолжаем мониторинг
+          if (error instanceof Error && error.name === 'TimeoutError') {
+            // Проверяем, не покинули ли мы конференцию другим способом
+            resolveWithTime('left_conference');
+            return;
+            // const inConference = await this.isInConference();
+            // if (!inConference) {
+            //   resolveWithTime('left_conference');
+            //   return;
+            // }
+
+            // // Продолжаем ждать навигации
+            // handleNavigation();
+          } else {
+            this.logger.warn('Ошибка при ожидании навигации', error as Error);
+            // Продолжаем мониторинг даже при ошибках
+            handleNavigation();
+          }
+        }
+      };
+
+      // Обработка ошибок страницы
+      this.page?.on('error', () => {
+        resolveWithTime('page_error');
+      });
+
+      // Обработка закрытия страницы
+      this.page?.on('close', () => {
+        resolveWithTime('page_closed');
+      });
+
+      // Начинаем мониторинг навигации
+      handleNavigation();
+    });
   }
 
   /**

@@ -14,11 +14,10 @@ import {
   CustomRequest,
   SimpleRecordRequest,
   TelemostError,
-  ValidationError
 } from './types';
 import { ensureDirectoryExists } from './utils/file';
 import { createLogger } from './utils/logger';
-import { validateRecordingParams } from './utils/validation';
+// import { validateRecordingParams } from './utils/validation';
 
 const app = express();
 const PORT = process.env['PORT'] || 3100;
@@ -68,24 +67,36 @@ app.use(cleanupTempFiles);
  * POST /api/record
  */
 app.post('/api/record', async (req: Request, res: Response, next: NextFunction) => {
-  const { meetingUrl, duration = 10, format = 'webm' }: SimpleRecordRequest = req.body;
+  const {
+    meetingUrl,
+    duration = 10,
+    format = 'webm',
+    recordUntilEnd = false,
+    maxDuration = 7200 // 2 часа по умолчанию
+  }: SimpleRecordRequest = req.body;
 
   logger.info('Received request:', req.body);
+  logger.info('Received request:', req.body.recordUntilEnd);
 
   try {
     // Валидация входных данных
-    const validation = validateRecordingParams({ meetingUrl, duration, format });
-    if (!validation.isValid) {
-      throw new ValidationError('Неверные параметры запроса', validation.errors);
-    }
+    // const validation = validateRecordingParams({ 
+    //   meetingUrl, 
+    //   duration: recordUntilEnd ? maxDuration : duration, 
+    //   format 
+    // });
+    // if (!validation.isValid) {
+    //   throw new ValidationError('Неверные параметры запроса', validation.errors);
+    // }
 
     const recordingId = uuidv4();
     const outputPath = `./recordings/recording_${recordingId}.${format}`;
 
     logger.start(`Запись ${recordingId}:`, {
       meetingUrl,
-      duration,
+      duration: recordUntilEnd ? `до завершения встречи (макс. ${maxDuration}с)` : duration,
       format,
+      recordUntilEnd,
     });
 
     const recorder = new TelemostRecorder({
@@ -99,7 +110,9 @@ app.post('/api/record', async (req: Request, res: Response, next: NextFunction) 
 
     try {
       // Записываем аудио
-      const result = await recorder.recordForDuration(meetingUrl, duration, outputPath);
+      const result = recordUntilEnd
+        ? await recorder.recordUntilMeetingEnd(meetingUrl, maxDuration, outputPath)
+        : await recorder.recordForDuration(meetingUrl, duration, outputPath);
 
       if (!result.success) {
         throw new TelemostError(

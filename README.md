@@ -45,15 +45,31 @@ curl -X POST http://localhost:3100/api/record \
 - `meetingUrl` (string, обязательный) - URL конференции в Yandex Telemost
 - `duration` (number, опциональный) - Длительность записи в секундах (10-3600, по умолчанию: 300)
 - `format` (string, опциональный) - Формат аудио (webm, mp3, wav, по умолчанию: webm)
+- `recordUntilEnd` (boolean, опциональный) - Записывать до завершения встречи (по умолчанию: false)
+- `maxDuration` (number, опциональный) - Максимальная продолжительность записи в секундах при recordUntilEnd=true (по умолчанию: 7200)
 
-**Пример запроса:**
+**Примеры запросов:**
 
+**Запись на фиксированное время:**
 ```bash
 curl -X POST http://localhost:3100/api/record \
   -H "Content-Type: application/json" \
   -d '{
     "meetingUrl": "https://telemost.yandex.ru/your-meeting-url",
     "duration": 300,
+    "format": "webm"
+  }' \
+  --output recording.webm
+```
+
+**Запись до завершения встречи (максимум 2 часа):**
+```bash
+curl -X POST http://localhost:3100/api/record \
+  -H "Content-Type: application/json" \
+  -d '{
+    "meetingUrl": "https://telemost.yandex.ru/your-meeting-url",
+    "recordUntilEnd": true,
+    "maxDuration": 7200,
     "format": "webm"
   }' \
   --output recording.webm
@@ -131,7 +147,8 @@ npm run clean
 
 ## 🚨 Ограничения
 
-- Максимальная длительность записи: 1 час (3600 секунд)
+- Максимальная длительность записи: 1 час (3600 секунд) для фиксированной записи
+- Максимальная длительность записи до завершения встречи: 2 часа (7200 секунд)
 - Минимальная длительность записи: 10 секунд
 - Поддерживаемые форматы: webm, mp3, wav
 - Файлы автоматически удаляются после отправки
@@ -143,13 +160,39 @@ npm run clean
 ```javascript
 const axios = require("axios");
 
-async function recordMeeting() {
+// Запись на фиксированное время
+async function recordMeetingFixed() {
   try {
     const response = await axios.post(
       "http://localhost:3100/api/record",
       {
         meetingUrl: "https://telemost.yandex.ru/your-meeting-url",
         duration: 300,
+        format: "webm",
+      },
+      {
+        responseType: "stream",
+      }
+    );
+
+    const writer = fs.createWriteStream("meeting.webm");
+    response.data.pipe(writer);
+
+    console.log("Запись завершена");
+  } catch (error) {
+    console.error("Ошибка:", error.response?.data);
+  }
+}
+
+// Запись до завершения встречи
+async function recordMeetingUntilEnd() {
+  try {
+    const response = await axios.post(
+      "http://localhost:3100/api/record",
+      {
+        meetingUrl: "https://telemost.yandex.ru/your-meeting-url",
+        recordUntilEnd: true,
+        maxDuration: 7200, // 2 часа
         format: "webm",
       },
       {
@@ -172,11 +215,32 @@ async function recordMeeting() {
 ```python
 import requests
 
-def record_meeting():
+# Запись на фиксированное время
+def record_meeting_fixed():
     url = "http://localhost:3100/api/record"
     data = {
         "meetingUrl": "https://telemost.yandex.ru/your-meeting-url",
         "duration": 300,
+        "format": "webm"
+    }
+
+    response = requests.post(url, json=data, stream=True)
+
+    if response.status_code == 200:
+        with open('meeting.webm', 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print("Запись завершена")
+    else:
+        print(f"Ошибка: {response.json()}")
+
+# Запись до завершения встречи
+def record_meeting_until_end():
+    url = "http://localhost:3100/api/record"
+    data = {
+        "meetingUrl": "https://telemost.yandex.ru/your-meeting-url",
+        "recordUntilEnd": True,
+        "maxDuration": 7200,  # 2 часа
         "format": "webm"
     }
 

@@ -129,6 +129,8 @@ export interface SimpleRecordRequest {
   meetingUrl: string;
   duration?: number;
   format?: 'webm' | 'mp3' | 'wav';
+  recordUntilEnd?: boolean; // Новая опция для записи до завершения встречи
+  maxDuration?: number; // Максимальная продолжительность в секундах (по умолчанию 2 часа)
 }
 
 // ===== EXPRESS ТИПЫ =====
