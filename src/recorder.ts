@@ -152,7 +152,7 @@ export class TelemostRecorder {
       this.logger.info('Страница загружена, поиск кнопки входа в конференцию...');
 
       // Ищем кнопку входа в конференцию
-      // await this.clickEnterConferenceButton();
+      await this.clickEnterConferenceButton();
 
       // this.logger.info('Ожидание установления WebRTC соединения');
 
