@@ -35,10 +35,13 @@ export class TelemostRecorder {
   private fileStream: FileStream | null = null;
   private isRecording: boolean = false;
   private logger = createLogger(DEFAULT_CONFIG.logging);
+  private instanceId: string;
 
   constructor(options: TelemostRecorderOptions = {}) {
     this.config = this.mergeConfig(options);
     this.logger = createLogger(this.config.logging);
+    this.instanceId = Math.random().toString(36).substring(2, 15);
+    this.logger.info(`Создан экземпляр TelemostRecorder с ID: ${this.instanceId}`);
   }
 
   /**
@@ -58,7 +61,7 @@ export class TelemostRecorder {
    * Инициализация браузера и страницы
    */
   async init(): Promise<void> {
-    this.logger.start('Инициализация браузера');
+    this.logger.start(`Инициализация браузера для экземпляра ${this.instanceId}`);
 
     try {
       const launchOptions: any = {
@@ -106,9 +109,10 @@ export class TelemostRecorder {
         // ]
       });
 
-      this.logger.success('launch прошел');
+      this.logger.success(`launch прошел для экземпляра ${this.instanceId}`);
 
       this.page = await this.browser.newPage();
+      this.logger.info(`Создана новая вкладка для экземпляра ${this.instanceId}`);
 
       // Настройка viewport
       // await this.page.setViewport(this.config.page.viewport);
@@ -126,7 +130,7 @@ export class TelemostRecorder {
       //   });
       // }
 
-      this.logger.success('Браузер инициализирован');
+      this.logger.success(`Браузер инициализирован для экземпляра ${this.instanceId}`);
     } catch (error) {
       this.logger.error('Ошибка инициализации браузера', error as Error);
       throw new RecordingError('Не удалось инициализировать браузер', error as Error);
@@ -141,7 +145,7 @@ export class TelemostRecorder {
       throw new RecordingError('Страница не инициализирована');
     }
 
-    this.logger.start(`Переход на страницу встречи: ${meetingUrl}`);
+    this.logger.start(`Переход на страницу встречи: ${meetingUrl} (экземпляр ${this.instanceId})`);
 
     try {
       await this.page.goto(meetingUrl, {
@@ -186,6 +190,16 @@ export class TelemostRecorder {
   }
 
   /**
+   * Получение текущего URL страницы для отладки
+   */
+  async getCurrentUrl(): Promise<string> {
+    if (!this.page) {
+      throw new RecordingError('Страница не инициализирована');
+    }
+    return await this.page.url();
+  }
+
+  /**
    * Поиск и нажатие кнопки входа в конференцию
    */
   async clickEnterConferenceButton(): Promise<void> {
@@ -194,6 +208,8 @@ export class TelemostRecorder {
     }
 
     try {
+      const currentUrl = await this.getCurrentUrl();
+      this.logger.info(`Текущий URL: ${currentUrl} (экземпляр ${this.instanceId})`);
       this.logger.info('Поиск кнопки с data-test-id="enter-conference-button"');
 
       // Ждем появления кнопки входа в конференцию
@@ -906,11 +922,14 @@ export class TelemostRecorder {
    * Очистка ресурсов
    */
   async cleanup(): Promise<void> {
+    this.logger.info(`Начинаем очистку ресурсов для экземпляра ${this.instanceId}`);
+
     if (this.isRecording) {
       await this.stopRecording();
     }
 
     if (this.browser) {
+      this.logger.info(`Закрываем браузер для экземпляра ${this.instanceId}`);
       await this.browser.close();
       this.browser = null;
     }
@@ -919,7 +938,7 @@ export class TelemostRecorder {
     this.audioStream = null;
     this.fileStream = null;
 
-    this.logger.info('Ресурсы очищены');
+    this.logger.info(`Ресурсы очищены для экземпляра ${this.instanceId}`);
   }
 
   /**

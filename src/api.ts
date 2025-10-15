@@ -106,6 +106,8 @@ app.post('/api/record', async (req: Request, res: Response, next: NextFunction) 
       logging: config.logging,
     });
 
+    logger.info(`Создан новый экземпляр рекордера для записи ${recordingId}`);
+
 
 
     try {
