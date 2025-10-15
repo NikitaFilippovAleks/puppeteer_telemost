@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 // import { Browser, Page, launch } from 'puppeteer';
-import { getStream, launch } from 'puppeteer-stream';
+import { getStream } from 'puppeteer-stream';
 // import { getStream, Stream } from 'puppeteer-stream';
 // import { Browser, Page } from 'puppeteer-stream/node_modules/puppeteer-core';
 // import { v4 as uuidv4 } from 'uuid';
@@ -21,26 +21,28 @@ import {
 } from '@/types';
 import { ensureDirectoryExists, getFileInfo } from '@/utils/file';
 import { createLogger } from '@/utils/logger';
-import { Browser, executablePath, Page } from 'puppeteer';
+import { Page } from 'puppeteer';
 // import Stream from 'stream';
 import { Transform } from "stream";
 // import { executablePath } from 'puppeteer';
+import BrowserManager from './browser-manager';
 
 
 export class TelemostRecorder {
   private config: AppConfig;
-  private browser: Browser | null = null;
   private page: Page | null = null;
   private audioStream: Transform | null = null;
   private fileStream: FileStream | null = null;
   private isRecording: boolean = false;
   private logger = createLogger(DEFAULT_CONFIG.logging);
   private instanceId: string;
+  private browserManager: BrowserManager;
 
   constructor(options: TelemostRecorderOptions = {}) {
     this.config = this.mergeConfig(options);
     this.logger = createLogger(this.config.logging);
     this.instanceId = Math.random().toString(36).substring(2, 15);
+    this.browserManager = BrowserManager.getInstance();
     this.logger.info(`Создан экземпляр TelemostRecorder с ID: ${this.instanceId}`);
   }
 
@@ -61,79 +63,24 @@ export class TelemostRecorder {
    * Инициализация браузера и страницы
    */
   async init(): Promise<void> {
-    this.logger.start(`Инициализация браузера для экземпляра ${this.instanceId}`);
+    this.logger.start(`Инициализация для экземпляра ${this.instanceId}`);
 
     try {
-      const launchOptions: any = {
-        headless: 'new',
-        args: this.config.browser.args,
-        allowIncognito: true,
-      };
+      // Получаем или создаем браузер через менеджер
+      await this.browserManager.getBrowser();
 
-      if (this.config.browser.executablePath) {
-        launchOptions.executablePath = this.config.browser.executablePath;
-      }
+      // Получаем статистику браузера для отладки
+      const stats = await this.browserManager.getBrowserStats();
+      this.logger.info(`Браузер готов: ${stats.isConnected}, вкладок: ${stats.pagesCount}, версия: ${stats.version}`);
 
-      // this.browser = await launch(launchOptions);
-
-      this.browser = await launch({
-        // headless: false,
-        // dumpio: true,
-        // macOS:
-        // allowIncognito: true,
-        allowIncognito: true,
-        // executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        // executablePath: '/usr/bin/chromium',
-        // startDelay: 2000,
-        headless: 'new',
-        // linux (docker):
-        executablePath: executablePath(),
-        // headless: "new", // supports audio!
-        args: [
-          '--enable-extensions',
-          "--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli",
-          '--no-sandbox', // Для работы в docker
-          // '--allow-file-access-from-files',
-          // '--enable-audio-service',
-          // '--mute-audio=false',
-        ],
-        // headless: false, // for debugging
-        defaultViewport: { width: 1920, height: 1080 },
-        // args: [
-        //     '--headless=new',
-        //     // '--window-size=1920,1080',
-        //     // '--start-fullscreen',
-        //     '--allow-file-access-from-files',
-        //     '--enable-audio-service',
-        //     '--mute-audio=false',
-        // ]
-      });
-
-      this.logger.success(`launch прошел для экземпляра ${this.instanceId}`);
-
-      this.page = await this.browser.newPage();
+      // Создаем новую вкладку
+      this.page = await this.browserManager.createPage();
       this.logger.info(`Создана новая вкладка для экземпляра ${this.instanceId}`);
 
-      // Настройка viewport
-      // await this.page.setViewport(this.config.page.viewport);
-
-      // Настройка логирования
-      // if (this.config.logging.enableConsoleLogs) {
-      //   this.page.on('console', (msg: any) => {
-      //     this.logger.pageLog(msg.text());
-      //   });
-      // }
-
-      // if (this.config.logging.enablePageErrors) {
-      //   this.page.on('pageerror', (error: Error) => {
-      //     this.logger.pageError(error.message, error);
-      //   });
-      // }
-
-      this.logger.success(`Браузер инициализирован для экземпляра ${this.instanceId}`);
+      this.logger.success(`Инициализация завершена для экземпляра ${this.instanceId}`);
     } catch (error) {
-      this.logger.error('Ошибка инициализации браузера', error as Error);
-      throw new RecordingError('Не удалось инициализировать браузер', error as Error);
+      this.logger.error('Ошибка инициализации', error as Error);
+      throw new RecordingError('Не удалось инициализировать', error as Error);
     }
   }
 
@@ -928,15 +875,19 @@ export class TelemostRecorder {
       await this.stopRecording();
     }
 
-    if (this.browser) {
-      this.logger.info(`Закрываем браузер для экземпляра ${this.instanceId}`);
-      await this.browser.close();
-      this.browser = null;
+    // Закрываем только вкладку, браузер остается открытым
+    if (this.page) {
+      this.logger.info(`Закрываем вкладку для экземпляра ${this.instanceId}`);
+      await this.page.close();
+      this.page = null;
     }
 
-    this.page = null;
     this.audioStream = null;
     this.fileStream = null;
+
+    // Получаем статистику браузера после очистки
+    const stats = await this.browserManager.getBrowserStats();
+    this.logger.info(`Осталось вкладок в браузере: ${stats.pagesCount}`);
 
     this.logger.info(`Ресурсы очищены для экземпляра ${this.instanceId}`);
   }
@@ -951,9 +902,9 @@ export class TelemostRecorder {
     hasPage: boolean;
   } {
     return {
-      isInitialized: this.browser !== null,
+      isInitialized: this.browserManager.isBrowserReady(),
       isRecording: this.isRecording,
-      hasBrowser: this.browser !== null,
+      hasBrowser: this.browserManager.isBrowserReady(),
       hasPage: this.page !== null,
     };
   }

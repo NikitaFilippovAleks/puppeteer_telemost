@@ -7,6 +7,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 
+import BrowserManager from './browser-manager';
 import { config } from './config';
 import { TelemostRecorder } from './recorder';
 import {
@@ -61,6 +62,29 @@ const cleanupTempFiles = (req: CustomRequest, res: Response, next: NextFunction)
 };
 
 app.use(cleanupTempFiles);
+
+/**
+ * Эндпоинт для получения статистики браузера
+ * GET /api/browser-stats
+ */
+app.get('/api/browser-stats', async (_: Request, res: Response) => {
+  try {
+    const browserManager = BrowserManager.getInstance();
+    const stats = await browserManager.getBrowserStats();
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    logger.error('Ошибка получения статистики браузера', error as Error);
+    res.status(500).json({
+      success: false,
+      error: 'browser_stats_error',
+      message: 'Ошибка получения статистики браузера',
+    });
+  }
+});
 
 /**
  * Эндпоинт для записи аудио с Yandex Telemost
@@ -212,8 +236,9 @@ process.on('SIGTERM', () => {
 // Запуск сервера
 app.listen(PORT, () => {
   logger.success(`API сервер запущен на порту ${PORT}`);
-  logger.info('Доступный эндпоинт:');
+  logger.info('Доступные эндпоинты:');
   logger.info(`  POST http://localhost:${PORT}/api/record - Записать аудио с конференции`);
+  logger.info(`  GET  http://localhost:${PORT}/api/browser-stats - Статистика браузера`);
 });
 
 export default app;
