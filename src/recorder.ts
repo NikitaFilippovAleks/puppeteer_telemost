@@ -21,7 +21,7 @@ import {
 } from '@/types';
 import { ensureDirectoryExists, getFileInfo } from '@/utils/file';
 import { createLogger } from '@/utils/logger';
-import { Browser, Page } from 'puppeteer';
+import { Browser, executablePath, Page } from 'puppeteer';
 // import Stream from 'stream';
 import { Transform } from "stream";
 // import { executablePath } from 'puppeteer';
@@ -79,16 +79,20 @@ export class TelemostRecorder {
         // macOS:
         // allowIncognito: true,
         allowIncognito: true,
-        executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        // executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         // executablePath: '/usr/bin/chromium',
         // startDelay: 2000,
         headless: 'new',
         // linux (docker):
-        // executablePath: executablePath(),
+        executablePath: executablePath(),
         // headless: "new", // supports audio!
         args: [
           '--enable-extensions',
-          "--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli"
+          "--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli",
+          '--no-sandbox', // Для работы в docker
+          // '--allow-file-access-from-files',
+          // '--enable-audio-service',
+          // '--mute-audio=false',
         ],
         // headless: false, // for debugging
         defaultViewport: { width: 1920, height: 1080 },
